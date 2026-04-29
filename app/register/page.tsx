@@ -81,7 +81,8 @@ export default function Register() {
     try {
       const { confirmPassword, ...signupData } = formData;
       await signup(signupData);
-      router.push('/dashboard');
+      // Donors must complete health screening before accessing dashboard
+      router.push(formData.role === 'donor' ? '/health-screening' : '/dashboard');
     } catch (error: any) {
       setApiError(error.message || "Registration failed. Please try again.");
     } finally {

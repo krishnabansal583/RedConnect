@@ -6,7 +6,7 @@ import Card from "@/components/Card";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import { useAuth } from "@/lib/AuthContext";
-import { authAPI, requestAPI, donationAPI } from "@/lib/api";
+import { authAPI, requestAPI, donationAPI, healthScreeningAPI } from "@/lib/api";
 
 interface DonationHistory {
   id: number;
@@ -31,6 +31,7 @@ export default function DonorDashboard() {
   const [profileData, setProfileData] = useState<any>(null);
   const [emergencyRequests, setEmergencyRequests] = useState<EmergencyRequest[]>([]);
   const [eligibility, setEligibility] = useState<any>(null);
+  const [screeningStatus, setScreeningStatus] = useState<any>(null);
 
   // Mock donation history (can be replaced with API call later)
   const mockDonationHistory: DonationHistory[] = [
@@ -77,6 +78,14 @@ export default function DonorDashboard() {
           console.error("Error fetching eligibility:", error);
         }
 
+        // Fetch health screening status
+        try {
+          const screening = await healthScreeningAPI.getStatus();
+          setScreeningStatus(screening);
+        } catch (error) {
+          console.error("Error fetching screening status:", error);
+        }
+
         // Fetch emergency requests
         const requests = await requestAPI.getRequests({
           urgencyLevel: "Emergency",
@@ -116,6 +125,11 @@ export default function DonorDashboard() {
   };
 
   const calculateNextEligibleDate = () => {
+    // If screening not done or failed → not applicable yet
+    if (!screeningStatus?.isComplete) return "Complete screening first";
+    if (screeningStatus?.eligible === false) return "Not eligible (screening)";
+
+    // Screening passed — now check 90-day donation rule
     if (eligibility?.nextEligibleDate) {
       return new Date(eligibility.nextEligibleDate).toLocaleDateString("en-US", {
         month: "short",
@@ -123,20 +137,20 @@ export default function DonorDashboard() {
         year: "numeric",
       });
     }
-    if (eligibility?.eligible) {
-      return "Eligible Now";
+    if (eligibility?.eligible === false) {
+      // Has a lastDonationDate but nextEligibleDate not returned — compute it
+      const lastDonation = profileData?.lastDonationDate;
+      if (lastDonation) {
+        const nextDate = new Date(lastDonation);
+        nextDate.setDate(nextDate.getDate() + 90);
+        return nextDate.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
     }
-    const lastDonation = profileData?.lastDonationDate;
-    if (!lastDonation) {
-      return "Eligible Now";
-    }
-    const nextDate = new Date(lastDonation);
-    nextDate.setDate(nextDate.getDate() + 90);
-    return nextDate.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    return "Eligible Now";
   };
 
   if (authLoading || loading) {
@@ -163,8 +177,16 @@ export default function DonorDashboard() {
     livesSaved: (eligibility?.donationCount || profileData?.donationCount || 0) * 3,
     nextEligibleDate: calculateNextEligibleDate(),
     reliabilityScore: eligibility?.reliabilityScore || profileData?.reliabilityScore || 50,
-    isEligible: eligibility?.eligible !== false,
-    daysUntilEligible: eligibility?.daysUntilEligible || 0,
+    // ── Eligibility: must pass BOTH health screening AND 90-day rule ──────
+    // screeningStatus is null while loading — treat as pending (not eligible yet)
+    screeningDone:      screeningStatus?.isComplete === true,
+    screeningEligible:  screeningStatus?.eligible === true,
+    // 90-day rule: eligible === true means passed, undefined/null means no donation yet (eligible)
+    donationEligible:   eligibility?.eligible !== false,
+    daysUntilEligible:  eligibility?.daysUntilEligible || 0,
+    get isEligible() {
+      return this.screeningDone && this.screeningEligible && this.donationEligible;
+    },
   };
 
   return (
@@ -177,6 +199,52 @@ export default function DonorDashboard() {
           </h1>
           <p className="text-lg text-gray-600">Welcome back, {donor.name}!</p>
         </div>
+
+        {/* Health Screening Banner */}
+        {screeningStatus && !screeningStatus.isComplete && (
+          <div className="mb-6 flex items-start gap-4 bg-amber-50 border border-amber-300 rounded-xl p-4">
+            <div className="shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+              <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-amber-900 text-sm">Complete your Health Screening</p>
+              <p className="text-amber-700 text-xs mt-0.5">
+                You need to fill a quick health form to become an active donor and appear in search results.
+              </p>
+            </div>
+            <Button size="sm" onClick={() => router.push("/health-screening")}>
+              Start Now
+            </Button>
+          </div>
+        )}
+
+        {/* Screening ineligible notice */}
+        {screeningStatus?.isComplete && screeningStatus.eligible === false && (
+          <div className="mb-6 flex items-start gap-4 bg-red-50 border border-red-200 rounded-xl p-4">
+            <div className="shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+              <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-red-900 text-sm">Health Screening: Not Eligible</p>
+              {screeningStatus.reasons?.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {screeningStatus.reasons.map((r: string, i: number) => (
+                    <li key={i} className="text-xs text-red-700">• {r}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Button size="sm" onClick={() => router.push("/health-screening")}>
+              Re-submit
+            </Button>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Profile & Stats */}
@@ -345,19 +413,50 @@ export default function DonorDashboard() {
                   </div>
                 </div>
 
-                {!donor.isEligible && donor.daysUntilEligible > 0 && (
+                {/* ── Eligibility status — driven by screening + 90-day rule ── */}
+                {!donor.screeningDone && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-start">
+                      <svg className="w-5 h-5 text-amber-600 mr-2 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                      <div>
+                        <div className="text-sm font-semibold text-amber-900">
+                          Screening Pending
+                        </div>
+                        <div className="text-xs text-amber-700 mt-1">
+                          Complete health screening to activate donor status
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {donor.screeningDone && !donor.screeningEligible && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-start">
+                      <svg className="w-5 h-5 text-red-600 mr-2 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      <div>
+                        <div className="text-sm font-semibold text-red-900">
+                          Not Eligible (Health)
+                        </div>
+                        <div className="text-xs text-red-700 mt-1">
+                          Your health screening did not pass
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {donor.screeningDone && donor.screeningEligible && !donor.donationEligible && (
                   <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <div className="flex items-start">
-                      <svg
-                        className="w-5 h-5 text-yellow-600 mr-2 mt-0.5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
+                      <svg className="w-5 h-5 text-yellow-600 mr-2 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                           d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
                         />
                       </svg>
@@ -376,16 +475,8 @@ export default function DonorDashboard() {
                 {donor.isEligible && (
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                     <div className="flex items-start">
-                      <svg
-                        className="w-5 h-5 text-green-600 mr-2 mt-0.5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
+                      <svg className="w-5 h-5 text-green-600 mr-2 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                           d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                       </svg>
@@ -394,7 +485,7 @@ export default function DonorDashboard() {
                           Eligible to Donate
                         </div>
                         <div className="text-xs text-green-700 mt-1">
-                          You can donate blood now
+                          Health screening passed · Ready to donate
                         </div>
                       </div>
                     </div>

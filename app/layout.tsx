@@ -3,6 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { AuthProvider } from "@/lib/AuthContext";
+import Chatbot from "@/components/Chatbot";
 
 export const metadata: Metadata = {
   title: "RedConnect - Blood Donation Platform",
@@ -21,6 +22,7 @@ export default function RootLayout({
           <Navbar />
           <main className="flex-grow">{children}</main>
           <Footer />
+          <Chatbot />
         </AuthProvider>
       </body>
     </html>

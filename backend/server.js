@@ -10,7 +10,8 @@ const requestRoutes = require('./routes/requestRoutes');
 const leaderboardRoutes = require('./routes/leaderboardRoutes');
 const campusRoutes = require('./routes/campusRoutes');
 const matchingRoutes = require('./routes/matchingRoutes');
-const donationRoutes = require('./routes/donationRoutes');
+const donationRoutes          = require('./routes/donationRoutes');
+const healthScreeningRoutes   = require('./routes/healthScreeningRoutes');
 
 // Connect to database
 connectDB();
@@ -29,7 +30,8 @@ app.use('/api/requests', requestRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/campuses', campusRoutes);
 app.use('/api/match-donors', matchingRoutes);
-app.use('/api/donations', donationRoutes);
+app.use('/api/donations',        donationRoutes);
+app.use('/api/health-screening', healthScreeningRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

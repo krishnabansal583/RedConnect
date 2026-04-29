@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
-import Badge from "@/components/Badge";
+import { useVoiceSearch } from "@/lib/useVoiceSearch";
 
 interface Donor {
   id: number;
@@ -153,6 +153,18 @@ export default function FindDonor() {
   const [city, setCity] = useState("");
   const [donors, setDonors] = useState<Donor[]>([]);
 
+  // Voice search — autofill blood group + city from speech
+  const handleVoiceResult = useCallback(
+    (result: { blood_group: string; city: string }) => {
+      if (result.blood_group) setBloodGroup(result.blood_group);
+      if (result.city) setCity(result.city);
+    },
+    []
+  );
+
+  const { listening, transcript, finalTranscript, aiStatus, detectedLang, startListening, stopListening, speak } =
+    useVoiceSearch(handleVoiceResult);
+
   // Filter and sort donors whenever filters change
   useEffect(() => {
     let filtered = [...allDonors];
@@ -183,7 +195,9 @@ export default function FindDonor() {
 
   const handleSearch = () => {
     // Trigger re-filter (already handled by useEffect)
-    console.log("Searching for:", bloodGroup, city);
+    const bg = bloodGroup || "any blood group";
+    const ct = city.trim() || "all cities";
+    speak(`Found ${donors.length} donors for ${bg} in ${ct}`);
   };
 
   const getPriorityLabel = (score: number) => {
@@ -268,6 +282,134 @@ export default function FindDonor() {
             </div>
           </div>
         </Card>
+
+        {/* ── Voice AI Search Button ───────────────────────────────────── */}
+        <div className="mb-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={listening ? stopListening : startListening}
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm border-2 transition-all shadow-sm ${
+              listening
+                ? "bg-red-600 border-red-600 text-white shadow-red-200 shadow-md"
+                : "bg-white border-red-500 text-red-600 hover:bg-red-50"
+            }`}
+          >
+            {listening ? (
+              <>
+                {/* Animated waveform */}
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="2"  y="9"  width="2" height="6"  rx="1" />
+                  <rect x="6"  y="6"  width="2" height="12" rx="1" />
+                  <rect x="10" y="3"  width="2" height="18" rx="1" />
+                  <rect x="14" y="6"  width="2" height="12" rx="1" />
+                  <rect x="18" y="9"  width="2" height="6"  rx="1" />
+                </svg>
+                Stop Listening
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 3a4 4 0 014 4v4a4 4 0 01-8 0V7a4 4 0 014-4z"
+                  />
+                </svg>
+                🤖 Search by Voice AI
+              </>
+            )}
+          </button>
+
+          {/* Subtle hint text */}
+          {!listening && aiStatus === "idle" && (
+            <span className="text-xs text-gray-400">
+              Say e.g. "B positive in Delhi" or "O negative Mumbai urgent"
+            </span>
+          )}
+        </div>
+
+        {/* Voice status strip — only visible when active */}
+        {(listening || aiStatus !== "idle") && (
+          <div className={`mb-6 flex items-start gap-3 px-4 py-3 rounded-lg text-sm font-medium border transition-all ${
+            listening
+              ? "bg-red-50 border-red-200 text-red-700"
+              : aiStatus === "processing"
+              ? "bg-yellow-50 border-yellow-200 text-yellow-700"
+              : aiStatus === "done"
+              ? "bg-green-50 border-green-200 text-green-700"
+              : "bg-red-50 border-red-200 text-red-700"
+          }`}>
+            {/* Icon */}
+            <span className="mt-0.5 shrink-0">
+              {listening && (
+                <span className="flex h-4 w-4 items-center justify-center">
+                  <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                </span>
+              )}
+              {!listening && aiStatus === "processing" && (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+              )}
+              {!listening && aiStatus === "done" && (
+                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {!listening && (aiStatus === "error" || aiStatus === "no-match") && (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" />
+                </svg>
+              )}
+            </span>
+
+            {/* Message */}
+            <span className="flex flex-col gap-0.5">
+              {listening && (
+                <>
+                  <span>{detectedLang === "hi" ? "🎤 Sun raha hoon… blood group aur city bolein" : "🎤 Listening… speak your blood group and city"}</span>
+                  {transcript && (
+                    <span className="text-xs font-normal opacity-80 italic">"{transcript}"</span>
+                  )}
+                </>
+              )}
+              {!listening && aiStatus === "processing" && (
+                <span>{detectedLang === "hi" ? "⏳ Samajh raha hoon…" : "⏳ Processing your voice input…"}</span>
+              )}
+              {!listening && aiStatus === "done" && finalTranscript && (
+                <>
+                  <span>{detectedLang === "hi" ? "✅ Form fill ho gaya" : "✅ Form filled from voice"}</span>
+                  <span className="text-xs font-normal opacity-80 italic">
+                    {detectedLang === "hi" ? "Suna: " : "Heard: "}"{finalTranscript}"
+                  </span>
+                </>
+              )}
+              {!listening && aiStatus === "no-match" && (
+                <>
+                  <span>
+                    {detectedLang === "hi"
+                      ? "Samajh nahi aaya. Blood group aur city bolein."
+                      : "Could not detect blood group or city."}
+                  </span>
+                  {finalTranscript && (
+                    <span className="text-xs font-normal opacity-80">
+                      {detectedLang === "hi"
+                        ? `Suna: "${finalTranscript}" — jaise bolein: B positive Delhi mein`
+                        : `Heard: "${finalTranscript}" — try saying e.g. "B positive in Delhi"`}
+                    </span>
+                  )}
+                </>
+              )}
+              {!listening && aiStatus === "error" && (
+                <span>
+                  {detectedLang === "hi"
+                    ? "Microphone mein problem hai. Dobara try karein."
+                    : "Microphone error. Please check permissions and try again."}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
 
         {/* Results Count */}
         <div className="mb-6">
@@ -403,7 +545,15 @@ export default function FindDonor() {
                 </div>
 
                 {/* Request Button */}
-                <Button className="w-full" size="md">
+                <Button
+                  className="w-full"
+                  size="md"
+                  onClick={() =>
+                    speak(
+                      `${donor.name} is a ${donor.badgeLevel} donor with blood group ${donor.bloodGroup} located in ${donor.city}, ${donor.distance} kilometers away, with a reliability score of ${donor.reliabilityScore} percent and ${donor.totalDonations} total donations.`
+                    )
+                  }
+                >
                   Request Donation
                 </Button>
               </Card>

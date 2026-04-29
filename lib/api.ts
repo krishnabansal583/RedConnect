@@ -108,7 +108,29 @@ export const campusAPI = {
   },
 };
 
-// Donation API
+// Health Screening API
+export const healthScreeningAPI = {
+  submit: async (formData: {
+    age: number;
+    weight: number;
+    hasDiabetes: boolean;
+    hasHeartDisease: boolean;
+    hasHIV: boolean;
+    hasHepatitis: boolean;
+    recentSurgery: boolean;
+    recentTattoo: boolean;
+    currentMedications: boolean;
+    isPregnant: boolean;
+    alcoholLast24h: boolean;
+  }) => {
+    const response = await axios.post('/health-screening/submit', formData);
+    return response.data;
+  },
+  getStatus: async () => {
+    const response = await axios.get('/health-screening/status');
+    return response.data;
+  },
+};
 export const donationAPI = {
   recordDonation: async (donationData: {
     requestId?: string;

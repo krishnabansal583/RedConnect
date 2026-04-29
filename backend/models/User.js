@@ -64,6 +64,28 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Campus',
     },
+    // ── Health Screening ──────────────────────────────────────────────────
+    isHealthScreeningComplete: {
+      type: Boolean,
+      default: false,
+    },
+    healthScreening: {
+      age:                  { type: Number },
+      weight:               { type: Number },
+      hasDiabetes:          { type: Boolean },
+      hasHeartDisease:      { type: Boolean },
+      hasHIV:               { type: Boolean },
+      hasHepatitis:         { type: Boolean },
+      recentSurgery:        { type: Boolean },   // surgery in last 6 months
+      recentTattoo:         { type: Boolean },   // tattoo/piercing in last 6 months
+      currentMedications:   { type: Boolean },   // on blood-thinners or antibiotics
+      isPregnant:           { type: Boolean },
+      alcoholLast24h:       { type: Boolean },
+      submittedAt:          { type: Date },
+      // result stored after backend validation
+      eligible:             { type: Boolean },
+      ineligibilityReasons: [{ type: String }],
+    },
   },
   {
     timestamps: true,
