@@ -32,3 +32,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - Leaderboard (`/leaderboard`)
 - Login (`/login`)
 - Register (`/register`)
+
+
+
+here is the database screenshot - <img width="1354" height="692" alt="database" src="https://github.com/user-attachments/assets/a831bb05-1ab5-4f6e-b160-4739942613d0" />
+
+
